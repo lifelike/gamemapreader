@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 
-from collections import namedtuple
+from collections import namedtuple, Counter
+from itertools import chain
 import os.path
 import sys
 from PIL import Image
+from PIL.Image import Dither
 from PIL.Image import Transpose
 
 # Only map images specified here are supported.
@@ -43,18 +45,18 @@ SUPPORTED_IMAGES = {
             'orchard' : (156, 199, 124),
             'urban' : (251, 253, 1)
             },
-        'elevation_colors' : [
+        'elevation_colors' : (
             (255, 255, 247),
             (230, 207, 114),
             (211, 174, 81),
             (194, 149, 46)
-        ],
-        'connection_colors' : [
+        ),
+        'connection_colors' : (
             Edge('2nd class road', ROAD_COLORS, 3, 5),
             Edge('1st class road', ROAD_COLORS, 6, 11),
             Edge('stream', WATER_COLORS, 3, 5),
             Edge('river', WATER_COLORS, 6, 11)
-        ],
+        ),
         'fixes' : {}
     }
 }
@@ -64,16 +66,29 @@ def print_square_data(image, column, row,
                       terrain_colors,
                       elevation_colors,
                       connection_colors):
-    print(column, row, x1, y1, x2, y2)
+    terrain_counter = Counter()
+    elevation_counter = Counter()
     for y in range(y1, y2+1):
         for x in range(x1, x2+1):
-            image.putpixel((x, y), (255, 0, 0))
+            pass
+            #image.putpixel((x, y), (255, 0, 0))
+    print(column, row, x1, y1, x2, y2)
 
 def print_map_data(image, config):
+    colors = tuple(chain(
+        chain.from_iterable(config['terrain_colors'].values()),
+        chain.from_iterable(config['elevation_colors']),
+        chain.from_iterable(ROAD_COLORS),
+        chain.from_iterable(WATER_COLORS)))
+    colors += (0,) * (768 - len(colors))
     if image.size != config['size']:
         sys.exit('Wrong image size')
     if 'transpose' in config:
         image = image.transpose(config['transpose'])
+    paletteimage = Image.new('P', (1, 1), 0)
+    print(colors)
+    paletteimage.putpalette(colors)
+    image = image.quantize(palette=paletteimage, dither=Dither.NONE)
     for row in range(1, config['squares'][1]+1):
         y1 = config['rowys'][row-1]
         y2 = y1 + config['squaresize']
