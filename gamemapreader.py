@@ -16,14 +16,6 @@ from PIL.Image import Transpose
 # as well to support whatever differences there
 # may be between different maps.
 
-Edge = namedtuple('Edge',
-                  ('name', 'colors', 'minwidth', 'maxwidth'))
-
-ROAD_COLORS = ((174, 105, 17), (127, 24, 8))
-WATER_COLORS = ((88, 159, 238), (68, 168, 237))
-
-IGNORE_COLORS = ((135, 182, 237))
-
 SUPPORTED_IMAGES = {
     'Yz10cvV.jpeg' : {
         'game' : 'Main Battle Tank: Central Germany',
@@ -41,9 +33,9 @@ SUPPORTED_IMAGES = {
         'squaresize' : 24, #inner size of square to analyze
         'squarejump' : 1435/40, # how far to jump to next square,
         'terrain_colors' : {
-            'woods' : (122, 176, 129),
-            'orchard' : (156, 199, 124),
-            'urban' : (251, 253, 1)
+            (122, 176, 129) : 'woods',
+            (156, 199, 124) : 'orchard',
+            (251, 253, 1) : 'urban'
             },
         'elevation_colors' : (
             (255, 255, 247),
@@ -51,44 +43,62 @@ SUPPORTED_IMAGES = {
             (211, 174, 81),
             (194, 149, 46)
         ),
-        'connection_colors' : (
-            Edge('2nd class road', ROAD_COLORS, 3, 5),
-            Edge('1st class road', ROAD_COLORS, 6, 11),
-            Edge('stream', WATER_COLORS, 3, 5),
-            Edge('river', WATER_COLORS, 6, 11)
-        ),
         'fixes' : {}
     }
 }
 
+TERRAIN_THRESHOLD = 100
+ELEVATION_THRESHOLD = 25
+
 def print_square_data(image, column, row,
                       x1, y1, x2, y2,
                       terrain_colors,
-                      elevation_colors,
-                      connection_colors):
+                      elevation_colors):
     terrain_counter = Counter()
     elevation_counter = Counter()
     for y in range(y1, y2+1):
         for x in range(x1, x2+1):
-            pass
+            color = image.getpixel((x, y))
+            if color in terrain_colors:
+                terrain_counter[color] += 1
+            elif color in elevation_colors:
+                elevation_counter[color] += 1
             #image.putpixel((x, y), (255, 0, 0))
-    print(column, row, x1, y1, x2, y2)
+    most_terrain = terrain_counter.most_common(1)
+    most_elevation = elevation_counter.most_common(1)
+
+    terrain = 'open'
+    if len(most_terrain) > 0 and most_terrain[0][1] > TERRAIN_THRESHOLD:
+        terrain = terrain_colors[most_terrain[0][0]]
+    elevation = -1
+    if len(most_elevation) > 0 and most_elevation[0][1] > ELEVATION_THRESHOLD:
+        elevation = elevation_colors.index(most_elevation[0][0])
+
+    # XXX quick fix to set elevation of urban squares
+    # XXX that happens to work for this particular game
+    if terrain == 'urban':
+        if column <= 5 or (column, row) == (16, 13):
+            elevation = 2
+        elif column <= 28:
+            elevation = 1
+        else:
+            elevation = 0
+
+    square = f"{terrain} {elevation}"
+    print(column, row, x1, y1, x2, y2, most_terrain, most_elevation, square)
 
 def print_map_data(image, config):
     colors = tuple(chain(
-        chain.from_iterable(config['terrain_colors'].values()),
-        chain.from_iterable(config['elevation_colors']),
-        chain.from_iterable(ROAD_COLORS),
-        chain.from_iterable(WATER_COLORS)))
+        chain.from_iterable(config['terrain_colors'].keys()),
+        chain.from_iterable(config['elevation_colors'])))
     colors += (0,) * (768 - len(colors))
     if image.size != config['size']:
         sys.exit('Wrong image size')
     if 'transpose' in config:
         image = image.transpose(config['transpose'])
     paletteimage = Image.new('P', (1, 1), 0)
-    print(colors)
     paletteimage.putpalette(colors)
-    image = image.quantize(palette=paletteimage, dither=Dither.NONE)
+    image = image.quantize(palette=paletteimage, dither=Dither.NONE).convert(mode='RGB')
     for row in range(1, config['squares'][1]+1):
         y1 = config['rowys'][row-1]
         y2 = y1 + config['squaresize']
@@ -99,9 +109,8 @@ def print_map_data(image, config):
             print_square_data(image, column, row,
                               x1, y1, x2, y2,
                               config['terrain_colors'],
-                              config['elevation_colors'],
-                              config['connection_colors']) # TODO add fixes
-    image.show()
+                              config['elevation_colors'])
+
 
 if __name__ == '__main__':
     if len(sys.argv) != 2:
