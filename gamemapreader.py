@@ -50,10 +50,13 @@ SUPPORTED_IMAGES = {
 TERRAIN_THRESHOLD = 100
 ELEVATION_THRESHOLD = 25
 
+CSV_HEADER = '"column","row","terrain","elevation","1st class roads","2nc class roads","rivers","streams"'
+
 def print_square_data(image, column, row,
                       x1, y1, x2, y2,
                       terrain_colors,
-                      elevation_colors):
+                      elevation_colors,
+                      output):
     terrain_counter = Counter()
     elevation_counter = Counter()
     for y in range(y1, y2+1):
@@ -83,9 +86,7 @@ def print_square_data(image, column, row,
             elevation = 1
         else:
             elevation = 0
-
-    square = f"{terrain} {elevation}"
-    print(column, row, x1, y1, x2, y2, most_terrain, most_elevation, square)
+    print(f'{column},{row},"{terrain}",{elevation},"","","",""', file=output)
 
 def print_map_data(image, config):
     colors = tuple(chain(
@@ -99,17 +100,19 @@ def print_map_data(image, config):
     paletteimage = Image.new('P', (1, 1), 0)
     paletteimage.putpalette(colors)
     image = image.quantize(palette=paletteimage, dither=Dither.NONE).convert(mode='RGB')
-    for row in range(1, config['squares'][1]+1):
-        y1 = config['rowys'][row-1]
-        y2 = y1 + config['squaresize']
-        for column in range(1, config['squares'][0]+1):
-            x1 = config['columnxs'][column-1]
-            x2 = x1 + config['squaresize']
-
-            print_square_data(image, column, row,
-                              x1, y1, x2, y2,
-                              config['terrain_colors'],
-                              config['elevation_colors'])
+    with open(config['output'] + '.csv', 'w') as output:
+        print(CSV_HEADER, file=output)
+        for row in range(1, config['squares'][1]+1):
+            y1 = config['rowys'][row-1]
+            y2 = y1 + config['squaresize']
+            for column in range(1, config['squares'][0]+1):
+                x1 = config['columnxs'][column-1]
+                x2 = x1 + config['squaresize']
+                print_square_data(image, column, row,
+                                  x1, y1, x2, y2,
+                                  config['terrain_colors'],
+                                  config['elevation_colors'],
+                                  output)
 
 
 if __name__ == '__main__':
